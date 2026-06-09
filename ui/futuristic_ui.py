@@ -478,6 +478,28 @@ class ClawOSWindow(QMainWindow):
         self.profile_box.currentTextChanged.connect(self._on_profile_changed)
         side_layout.addWidget(self.profile_box)
 
+        # Agent profile selector
+        agent_label = QLabel("🤖 AGENT MODE")
+        agent_label.setObjectName("sectionTitle")
+        agent_label.setContentsMargins(12, 8, 0, 2)
+        side_layout.addWidget(agent_label)
+
+        self.agent_box = QComboBox()
+        self.agent_box.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {C['bg_3'].name()};
+                border: 1px solid {C['border'].name()};
+                border-radius: 6px;
+                padding: 6px 12px;
+                margin: 0 12px;
+                color: {C['cyan'].name()};
+                font-weight: 600;
+            }}
+        """)
+        self._load_agent_profiles()
+        self.agent_box.currentIndexChanged.connect(self._on_agent_changed)
+        side_layout.addWidget(self.agent_box)
+
         # Nav
         nav_label = QLabel("NAVIGATION")
         nav_label.setObjectName("sectionTitle")
@@ -747,6 +769,38 @@ class ClawOSWindow(QMainWindow):
             set_active_profile(pid)
             self._start_new_session()
             self._load_sessions()
+
+    def _load_agent_profiles(self):
+        """Load and display agent profiles in the dropdown."""
+        try:
+            from memory.agent_profiles import list_agent_profiles, get_active_agent
+            agents = list_agent_profiles()
+            active = get_active_agent()
+            self.agent_box.clear()
+            for a in agents:
+                label = f"{a['emoji']} {a['name']}"
+                self.agent_box.addItem(label, a["id"])
+            idx = self.agent_box.findData(active)
+            if idx >= 0:
+                self.agent_box.setCurrentIndex(idx)
+        except Exception as e:
+            print(f"[UI] Agent profile load error: {e}")
+
+    def _on_agent_changed(self, index: int):
+        """Switch agent profile when user picks a different one."""
+        if index < 0:
+            return
+        agent_id = self.agent_box.currentData()
+        if agent_id:
+            try:
+                from memory.agent_profiles import set_active_agent, get_system_prompt_for_agent
+                set_active_agent(agent_id)
+                prompt = get_system_prompt_for_agent(agent_id)
+                # Update window title with agent mode
+                agent_label = self.agent_box.currentText()
+                self.statusBar().showMessage(f"Switched to {agent_label}", 3000)
+            except Exception as e:
+                print(f"[UI] Agent switch error: {e}")
 
     def _load_sessions(self):
         try:

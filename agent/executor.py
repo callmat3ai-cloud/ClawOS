@@ -285,9 +285,11 @@ class AgentExecutor:
         step_results    = {}
         from integrations.composio_mcp import get_composio, is_configured as _comp_config
         from memory.profile_manager import format_memory_for_prompt
+        from memory.agent_profiles import get_active_agent
         _ctx = format_memory_for_prompt(limit=20) if memory_context is None else memory_context
         _cc = get_composio().get_tools_for_prompt() if _comp_config() else ""
-        plan = create_plan(goal, context=_ctx, composio_context=_cc)
+        _agent = get_active_agent()
+        plan = create_plan(goal, context=_ctx, composio_context=_cc, agent_profile_id=_agent)
 
         while True:
             steps = plan.get("steps", [])

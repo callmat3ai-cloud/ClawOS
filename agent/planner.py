@@ -178,13 +178,33 @@ def _get_api_key() -> str:
         return json.load(f)["gemini_api_key"]
 
 
-def create_plan(goal: str, context: str = "", composio_context: str = "") -> dict:
+def create_plan(
+    goal: str,
+    context: str = "",
+    composio_context: str = "",
+    agent_profile_id: str | None = None,
+) -> dict:
     import google.generativeai as genai
+
+    # Load agent profile training
+    agent_ctx = ""
+    if agent_profile_id:
+        try:
+            from memory.agent_profiles import get_agent_profile
+            ap = get_agent_profile(agent_profile_id)
+            if ap:
+                agent_ctx = f"\n[AGENT MODE: {ap['emoji']} {ap['name']}] {ap['description']}"
+        except Exception:
+            pass
+
+    system_instruction = PLANNER_PROMPT
+    if agent_ctx:
+        system_instruction += f"\n\n{agent_ctx}"
 
     genai.configure(api_key=_get_api_key())
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash-lite",
-        system_instruction=PLANNER_PROMPT
+        system_instruction=system_instruction
     )
 
     user_input = f"Goal: {goal}"
