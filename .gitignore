@@ -1,0 +1,24 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Runtime logs and generated files
+*.log
+downloads/
+
+# Local secrets and environment-specific config
+config/api_keys.json
+config/app_settings.json
+memory/long_term.json
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS and editor junk
+.DS_Store
+Thumbs.db
+.vscode/
