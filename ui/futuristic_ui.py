@@ -234,6 +234,8 @@ class VoiceOrb(QWidget):
     purple glow when processing, static when idle.
     """
 
+    clicked = pyqtSignal()  # Add the missing signal
+
     def __init__(self, parent=None, size: int = 120):
         super().__init__(parent)
         self.setFixedSize(size, size)
@@ -994,10 +996,6 @@ class ClawOSWindow(QMainWindow):
                 save_message(self._current_session_id, role, content)
             except Exception:
                 pass
-
-    def _process_user_message(self, text: str):
-        # Placeholder — will call planner → executor
-        QTimer.singleShot(600, lambda: self._add_message("assistant", "Thinking..."))
 
     def _add_cron_job(self):
         cron_text = self.cron_input.text().strip()

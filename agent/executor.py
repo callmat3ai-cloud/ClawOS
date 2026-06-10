@@ -275,6 +275,7 @@ class AgentExecutor:
         cancel_flag: threading.Event | None = None,
         memory_context: str = "",
         composio_context: str = "",
+        agent_profile_id: str | None = None,
         gemini_key: str | None = None,
         openrouter_key: str | None = None,
     ) -> ExecutionResult:
