@@ -898,12 +898,84 @@ class ClawOSWindow(QMainWindow):
             self._stop_voice_listening()
 
     def _start_voice_listening(self):
-        # Voice listening started — placeholder for implementation
-        pass
+        # TODO: connect to Brahma's meeting_assistant.py voice pipeline
+        self.statusBar().showMessage("🎤 Voice listening started...", 2000)
 
     def _stop_voice_listening(self):
-        # Voice listening stopped — placeholder for implementation
-        pass
+        # TODO: stop voice recording
+        self.statusBar().showMessage("🎤 Voice listening stopped", 2000)
+
+    def _process_user_message(self, text: str):
+        """Send user message to executor and display response."""
+        if not text.strip():
+            return
+
+        # Show thinking state
+        self.voice_orb.set_state("processing")
+
+        # Process in a background thread to avoid blocking UI
+        from PyQt6.QtCore import QThread
+        class ProcessThread(QThread):
+            def __init__(self, window, text):
+                super().__init__()
+                self.window = window
+                self.text = text
+                self.result = None
+                self.error = None
+
+            def run(self):
+                try:
+                    from agent.executor import AgentExecutor
+                    from memory.profile_manager import format_memory_for_prompt
+                    from memory.agent_profiles import get_active_agent
+                    from integrations.composio_mcp import get_composio, is_configured as _comp_config
+
+                    ctx = format_memory_for_prompt(limit=20)
+                    cc = get_composio().get_tools_for_prompt() if _comp_config() else ""
+                    agent_id = get_active_agent()
+
+                    executor = AgentExecutor()
+                    result = executor.execute(
+                        goal=self.text,
+                        memory_context=ctx,
+                        composio_context=cc,
+                        agent_profile_id=agent_id,
+                    )
+                    self.result = result
+                except Exception as e:
+                    self.error = str(e)
+
+        def on_done(thread: ProcessThread):
+            self.voice_orb.set_state("idle")
+            if thread.error:
+                self._add_message("assistant", f"⚠️ Error: {thread.error[:200]}")
+            elif thread.result:
+                r = thread.result
+                # Save messages
+                if self._current_session_id:
+                    try:
+                        from memory.profile_manager import save_message
+                        save_message(self._current_session_id, "user", text)
+                        save_message(self._current_session_id, "assistant", r.text)
+                    except Exception:
+                        pass
+                # Record action sequence for skill discovery
+                try:
+                    from skills.skill_discovery import record_action_sequence
+                    if r.actions_used:
+                        record_action_sequence(r.actions_used, text[:100])
+                except Exception:
+                    pass
+                # Display
+                self._add_message("assistant", r.text or "Done.")
+                if r.action_results:
+                    for ar in r.action_results:
+                        self._add_message("assistant", f"🔧 {ar}")
+            thread.deleteLater()
+
+        thread = ProcessThread(self, text)
+        thread.finished.connect(lambda: on_done(thread))
+        thread.start()
 
     def _add_message(self, role: str, content: str):
         from datetime import datetime as dt
