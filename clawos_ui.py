@@ -1786,7 +1786,10 @@ class ClawOSWindow(QMainWindow):
             self._settings_modal.close()
             self._settings_modal = None
 
-    def _apply_theme(self):
+    def _apply_theme(self, theme: str | None = None):
+        if theme:
+            self._theme = theme
+            C._theme = theme
         bg = C.get("BG")
         bg2 = C.get("BG2")
         text = C.get("TEXT")
@@ -1851,6 +1854,13 @@ class ClawOSWindow(QMainWindow):
                 approval = _load_approval()
                 executor = StreamingExecutor(approval)
 
+                # Wire approval callbacks
+                executor.set_approval_callbacks(
+                    on_show=lambda action: self.approval_request.emit(action),
+                    on_done=lambda approved: setattr(executor, "_approval_result", approved),
+                )
+                self._approval_resolver = executor.set_approval_result
+
                 def on_token(token: str):
                     if self._streaming_enabled:
                         self.streaming_token.emit(token)
@@ -1860,14 +1870,10 @@ class ClawOSWindow(QMainWindow):
                 def on_complete(text: str):
                     self.response_complete.emit()
 
-                def on_approval(action: str):
-                    self.approval_request.emit(action)
-
                 result = executor.execute(
                     goal=text,
                     on_token=on_token,
                     on_complete=on_complete,
-                    on_approval=on_approval,
                 )
 
                 if not self._streaming_enabled:
@@ -1920,12 +1926,15 @@ class ClawOSWindow(QMainWindow):
             ))
 
     def _on_response_complete(self, text: str = ""):
+        """text may be a string or ExecutionResult."""
         self._processing = False
         self._set_orb_state("idle")
-        if hasattr(self, "_current_bubble"):
-            self._current_bubble._streaming_done = True
-            if hasattr(self._current_bubble, "_stream_timer"):
-                self._current_bubble._stream_timer.stop()
+        if hasattr(self, "_current_bubble") and self._current_bubble:
+            b = self._current_bubble
+            if hasattr(b, "_streaming_done"):
+                b._streaming_done = True
+            if hasattr(b, "_stream_timer"):
+                b._stream_timer.stop()
             self._current_bubble = None
         self._log_activity(f"Response complete")
 
@@ -1984,6 +1993,27 @@ class ClawOSWindow(QMainWindow):
         """Show/hide the YOLO badge."""
         self._yolo_mode = enabled
         self._yolo_badge.setVisible(enabled)
+
+    def _clear_chat(self):
+        """Clear all chat bubbles from the chat area."""
+        while self._chat_layout.count() > 1:
+            item = self._chat_layout.takeAt(0)
+            if item and item.widget():
+                item.widget().deleteLater()
+        self._current_bubble = None
+
+    def _retry_last_message(self):
+        """Re-send the last user message to the LLM."""
+        # Find the last user bubble text
+        for i in range(self._chat_layout.count() - 1, -1, -1):
+            item = self._chat_layout.itemAt(i)
+            if item and item.widget():
+                w = item.widget()
+                if hasattr(w, "_role") and w._role == "user":
+                    text = w.toPlainText() if hasattr(w, "toPlainText") else ""
+                    if text:
+                        self._handle_send(text)
+                    break
 
     def _toggle_streaming(self):
         self._streaming_enabled = not self._streaming_enabled

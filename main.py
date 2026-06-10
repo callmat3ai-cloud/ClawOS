@@ -254,9 +254,25 @@ class ClawOSApp:
         is_yolo, clean = parse_slash_command(text)
         if is_yolo:
             self.window._set_yolo_mode(True)
+        # Handle slash commands (don't pass to LLM)
+        if text.strip().startswith("/") and self._handle_slash_command(text):
+            return
         self.window._center_input.clear()
         self.window._add_message("user", text)
         self._process_message(text)
+
+    def _handle_slash_command(self, text: str):
+        """Run a slash command, surface result as assistant message."""
+        from agent.slash_commands import execute_slash_command
+        response, handled = execute_slash_command(
+            text,
+            window=self.window,
+            main_app=self,
+            executor=None,
+        )
+        if handled and response:
+            self.window._add_message("assistant", response)
+        return handled
 
     def _process_message(self, text: str):
         if self._processing:
