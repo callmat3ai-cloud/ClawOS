@@ -76,6 +76,9 @@ class ClawOSApp:
         app.setApplicationName("ClawOS")
         app.setStyle("Fusion")
 
+        from memory.profile_manager import list_profiles, get_active_profile
+        self._profile_mgr = list_profiles
+
         self.window = ClawOSWindow()
         self.window._profile_manager = self._profile_mgr
         self.window._cron_manager = get_cron_manager()
@@ -86,10 +89,6 @@ class ClawOSApp:
             get_cron_manager().restore_all()
         except Exception as e:
             log.warning(f"Cron restore error: {e}")
-
-        # Set window._profile_manager for callbacks
-        from memory.profile_manager import list_profiles, get_active_profile
-        self._profile_mgr = list_profiles
 
         self.window.show()
         self._print_banner()
