@@ -276,11 +276,8 @@ class ClawOSApp:
                     composio_context=composio_ctx,
                 )
 
-                # If streaming was off, show full response
-                if not self.window._streaming_enabled:
-                    if result.text:
-                        self.window.streaming_token.emit(result.text)
-                    self.window.response_complete.emit()
+                # Non-streaming: the executor already called on_complete
+                # No redundant emit needed — remove to prevent double-display
 
             except Exception as e:
                 log.error(f"Executor error: {traceback.format_exc()}")

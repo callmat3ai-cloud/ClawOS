@@ -36,8 +36,29 @@ def _load_settings() -> dict:
 # ── Token Estimator ─────────────────────────────────────────────────
 
 def estimate_tokens(text: str) -> int:
-    """Rough token estimate: ~4 chars per token for English."""
-    return max(1, len(text) // 4)
+    """
+    Token estimate that handles multilingual text.
+    - English: ~4 chars/token
+    - Code: ~3 chars/token
+    - CJK (Chinese/Japanese/Korean): ~2 chars/token
+    - Mixed: weighted average
+    """
+    if not text:
+        return 0
+    # Detect non-ASCII characters
+    non_ascii = sum(1 for c in text if ord(c) > 127)
+    total = len(text)
+    if total == 0:
+        return 0
+    non_ascii_ratio = non_ascii / total
+    # Mixed: weight by script
+    # ascii chars → 4/tok, non-ascii → 2/tok (CJK avg)
+    ascii_count = total - non_ascii
+    # Code heuristic: more punctuation/operators → use 3
+    code_score = sum(1 for c in text if c in '{}[]();=+-*/<>&|') / max(total, 1)
+    if code_score > 0.05:
+        return max(1, int((ascii_count / 3.5) + (non_ascii / 2)))
+    return max(1, int((ascii_count / 4) + (non_ascii / 2)))
 
 
 # ── Memory Compression Engine ────────────────────────────────────────
@@ -105,7 +126,16 @@ class MemoryCompressor:
         return [summary_msg] + protected
 
     def _build_summary(self, messages: list[dict]) -> str:
-        """Build a text summary of old messages."""
+        """
+        Build a text summary of old messages.
+        First tries LLM summarization if an API key is available.
+        Falls back to keyword extraction.
+        """
+        # Try LLM summarization first
+        llm_summary = self._llm_summarize(messages)
+        if llm_summary:
+            return llm_summary
+        # Fallback: keyword extraction
         topics = []
         actions = []
 
@@ -143,6 +173,70 @@ class MemoryCompressor:
             parts.append(f"{len(messages)} messages exchanged")
 
         return " | ".join(parts) if parts else f"{len(messages)} earlier messages"
+
+    def _llm_summarize(self, messages: list[dict]) -> str | None:
+        """
+        Use an LLM to generate a high-quality summary.
+        Returns None on failure (caller falls back to keyword extraction).
+        """
+        try:
+            from integrations.composio_mcp import is_configured as _composio_configured
+            if not _composio_configured():
+                return None
+
+            # Build condensed message list
+            condensed = []
+            for m in messages:
+                role = m.get("role", "assistant")
+                content = m.get("content", "")[:300]
+                if content:
+                    condensed.append(f"[{role}]: {content}")
+
+            prompt = (
+                "Summarize this conversation concisely in 2-3 sentences. "
+                "Focus on: what the user asked, what was accomplished, any decisions made.\n\n"
+                + "\n".join(condensed[-20:])
+            )
+
+            # Call via OpenRouter or Anthropic
+            from integrations.providers import get_default_model, get_api_key
+            import requests
+
+            model_id = get_default_model("anthropic")
+            provider = "anthropic"
+            api_key = get_api_key(provider)
+            if not api_key:
+                return None
+
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+
+            if provider == "anthropic":
+                resp = requests.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={**headers, "x-api-key": api_key, "anthropic-version": "2023-06-01"},
+                    json={"model": model_id, "max_tokens": 256, "messages": [{"role": "user", "content": prompt}]},
+                    timeout=15,
+                )
+            else:
+                resp = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json={"model": model_id, "messages": [{"role": "user", "content": prompt}]},
+                    timeout=15,
+                )
+
+            if resp.status_code == 200:
+                data = resp.json()
+                if provider == "anthropic":
+                    return data["content"][0]["text"]
+                return data["choices"][0]["message"]["content"]
+
+        except Exception as e:
+            log.debug(f"LLM summarization failed: {e}")
+        return None
 
 
 # ── Token Budget Manager ─────────────────────────────────────────────

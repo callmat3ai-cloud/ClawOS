@@ -12,12 +12,28 @@
     "youtube_video",
     "open_app",
     "screen_process",
-    "computer_control"
+    "computer_control",
+    "composio_tool",
+    "code_helper",
+    "gmail_search",
+    "gmail_send",
+    "calendar_get",
+    "calendar_create",
+    "notion_page",
+    "linear_issue",
+    "github_list",
+    "github_issue",
+    "spotify_play",
+    "twitter_post",
+    "linkedin_post"
   ],
   "redact_secrets": true,
   "streaming_enabled": true,
   "max_agent_steps": 90,
+  "checkpoint_limit": 20,
   "subagent_max_parallel": 3,
+  "subagent_turn_limit": 50,
   "subagent_timeout": 600,
-  "tool_enforcement": "auto"
+  "tool_enforcement": "auto",
+  "enabled_toolsets": ["hermes-cli"]
 }

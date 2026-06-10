@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -81,12 +82,12 @@ PROVIDERS = {
         "api_base": "https://api.anthropic.com/v1",
         "auth_header": "x-api-key",
         "env_key": "ANTHROPIC_API_KEY",
-        "default_model": "claude-sonnet-4-6",
+        "default_model": "claude-sonnet-4-6-20250514",
         "supports_streaming": True,
         "supports_vision": True,
         "models": [
-            {"id": "claude-opus-4-7",    "name": "Claude Opus 4.7",    "context": 200000, "input": 3.00,  "output": 15.00},
-            {"id": "claude-sonnet-4-6",  "name": "Claude Sonnet 4.6",  "context": 200000, "input": 3.00,  "output": 15.00},
+            {"id": "claude-opus-4-7-20250514",    "name": "Claude Opus 4.7",    "context": 200000, "input": 3.00,  "output": 15.00},
+            {"id": "claude-sonnet-4-6-20250514",  "name": "Claude Sonnet 4.6",  "context": 200000, "input": 3.00,  "output": 15.00},
             {"id": "claude-3-5-haiku",   "name": "Claude 3.5 Haiku",   "context": 200000, "input": 0.80,  "output": 4.00},
             {"id": "claude-3-opus",      "name": "Claude 3 Opus",      "context": 200000, "input": 15.00, "output": 75.00},
             {"id": "claude-3-sonnet",    "name": "Claude 3 Sonnet",    "context": 200000, "input": 3.00,  "output": 15.00},
@@ -106,7 +107,7 @@ PROVIDERS = {
         "models": [
             {"id": "gemini-2.5-pro",    "name": "Gemini 2.5 Pro",    "context": 2000000, "input": 1.25,  "output": 10.00},
             {"id": "gemini-2.5-flash",  "name": "Gemini 2.5 Flash",  "context": 1000000, "input": 0.075, "output": 0.30},
-            {"id": "gemini-2.0-flash",  "name": "Gemini 2.0 Flash",  "context": 1000000, "input": 0.10,  "output": 0.40},
+            {"id": "gemini-2.0-flash-exp",  "name": "Gemini 2.0 Flash",  "context": 1000000, "input": 0.10,  "output": 0.40},
             {"id": "gemini-1.5-pro",    "name": "Gemini 1.5 Pro",    "context": 2000000, "input": 1.25,  "output": 10.00},
             {"id": "gemini-1.5-flash",  "name": "Gemini 1.5 Flash",  "context": 1000000, "input": 0.075, "output": 0.30},
         ],
@@ -178,7 +179,7 @@ PROVIDERS = {
         "supports_streaming": True,
         "supports_vision": False,
         "models": [
-            {"id": "deepseek-chat",    "name": "DeepSeek Chat V3",  "context": 64000, "input": 0.27, "output": 1.10},
+            {"id": "deepseek-chat-v3-0324", "name": "DeepSeek Chat V3",  "context": 64000, "input": 0.27, "output": 1.10},
             {"id": "deepseek-coder",  "name": "DeepSeek Coder",    "context": 64000, "input": 0.14, "output": 0.28},
             {"id": "deepseek-reasoner","name": "DeepSeek Reasoner", "context": 64000, "input": 0.55, "output": 2.19},
         ],
@@ -349,11 +350,17 @@ def add_custom_provider(name: str, api_base: str, api_key: str, default_model: s
     return True
 
 
+@lru_cache(maxsize=1)
 def get_all_providers() -> dict:
-    """Return all providers including custom ones."""
+    """Return all providers including custom ones. Cached — call _invalidate_providers_cache() to refresh."""
     all_providers = dict(PROVIDERS)
     all_providers.update(get_custom_providers())
     return all_providers
+
+
+def _invalidate_providers_cache():
+    """Call this when custom providers are added/modified."""
+    get_all_providers.cache_clear()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

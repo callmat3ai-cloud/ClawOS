@@ -274,7 +274,7 @@ class ApprovalDialog(QDialog):
         title.setStyleSheet(f"color: {palette['ACC']}; font-size: 16px; font-weight: 800;")
         lay.addWidget(title)
 
-        desc = QLabel(f"Brahma wants to perform this action:")
+        desc = QLabel(f"ClawOS wants to perform this action:")
         desc.setStyleSheet(f"color: {palette['TEXT']}; font-size: 13px;")
         lay.addWidget(desc)
 
@@ -1042,7 +1042,7 @@ class SettingsModal(QDialog):
 
         settings = _load_settings()
         servers = settings.get("mcp_servers", [
-            {"name": "Composio", "url": "https://backend.composio.dev/v3/mcp/...", "key": "...", "enabled": True},
+            {"name": "Composio", "url": "https://backend.composio.dev/v2/mcp", "key": "...", "enabled": True},
         ])
 
         self._mcp_rows = []
@@ -1915,11 +1915,22 @@ class ClawOSWindow(QMainWindow):
             self._current_bubble = None
         self._log_activity(f"Response complete")
 
+    # Thread-safe approval handling
+    _approval_signal = None  # set in __init__
+
     def _on_approval_request(self, action: str):
-        dialog = ApprovalDialog(action, self)
-        result = dialog.get_result()
-        # Pass result back to executor via approval state
-        self._last_approval_result = result
+        from PyQt6.QtCore import QTimer
+        self._last_approval_result = False
+
+        def show_dialog():
+            dialog = ApprovalDialog(action, self)
+            result = dialog.exec() == QDialog.DialogCode.Accepted
+            self._last_approval_result = result
+            # Signal executor thread to continue
+            if self._approval_signal is not None:
+                self._approval_signal.emit(result)
+
+        QTimer.singleShot(0, show_dialog)
 
     def _on_state_change(self, state: str):
         self._set_orb_state(state)

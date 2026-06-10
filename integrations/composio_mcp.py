@@ -64,7 +64,7 @@ def get_server_url() -> str:
             return data.get("composio_server_url", "https://connect.composio.dev/mcp")
         except Exception:
             pass
-    return "https://connect.composio.dev/mcp"
+    return "https://backend.composio.dev/v2/mcp"
 
 
 class ComposioMCP:

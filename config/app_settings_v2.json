@@ -1,6 +1,6 @@
 {
   "llm_provider": "anthropic",
-  "llm_model": "claude-sonnet-4-6",
+  "llm_model": "claude-sonnet-4-6-20250514",
   "streaming": true,
   "theme": "dark",
   "agent_profile": "assistant",

@@ -359,8 +359,16 @@ class ToolRegistry:
         except Exception:
             return {}
 
+    def _load_settings(self) -> dict:
+        try:
+            from pathlib import Path
+            settings_file = Path(__file__).resolve().parent.parent / "config" / "app_settings_v2.json"
+            return json.loads(settings_file.read_text()) if settings_file.exists() else {}
+        except Exception:
+            return {}
 
-# ── Streaming Executor ───────────────────────────────────────────────
+
+# ── Singleton helpers ───────────────────────────────────────────────
 
 @dataclass
 class ExecutionResult:
@@ -517,7 +525,7 @@ Important rules:
         try:
             from integrations.providers import (
                 get_all_providers, get_api_key, get_base_url, get_default_model,
-                chat_completion_streaming,
+                chat_completion_streaming, _load_settings as _ls,
             )
 
             settings = self._load_settings()
