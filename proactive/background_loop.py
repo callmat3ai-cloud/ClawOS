@@ -5,6 +5,7 @@ Drives: scheduler_agent, app_monitor, and surfaces alerts via UI.
 """
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import logging
 import threading
@@ -203,7 +204,6 @@ class ProactiveBackgroundLoop:
             log.info(f"Monitor alert: {result.message}")
 
     def _fire_task(self, task):
-        import datetime
         log.info(f"Firing task: {task.description}")
 
         # Surface as alert
@@ -213,7 +213,7 @@ class ProactiveBackgroundLoop:
             title=f"⏰ {task.description}",
             body=f"Scheduled task fired: {task.description}",
             severity="info",
-            timestamp=datetime.datetime.now().isoformat(),
+            timestamp=datetime.now().isoformat(),
             task_id=task.id,
         )
         self._add_alert(alert)
@@ -264,6 +264,3 @@ class ProactiveBackgroundLoop:
         self._alerts_file.write_text(json.dumps({
             "alerts": [a.__dict__ for a in self._alerts]
         }, indent=2))
-
-
-import datetime

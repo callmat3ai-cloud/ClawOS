@@ -63,8 +63,6 @@ class ClawOSApp:
     def __init__(self):
         self._current_session_id: str | None = None
         self._processing = False
-        self._approval_callback_result: bool = True
-        self._pending_executor = None
 
         # ── Load all subsystems ────────────────────────────────
         self._voice_engine = None
@@ -77,14 +75,15 @@ class ClawOSApp:
         from clawos_ui import ClawOSWindow
 
         self.window = ClawOSWindow()
+        self.window._app = self
         self.window._profile_manager = None
 
         # Wire up signals
         self.window.streaming_token.connect(self._on_token)
         self.window.response_complete.connect(self._on_complete)
-        self.window.approval_request.connect(self._on_approval_request)
+        # Approval is handled asynchronously via _approval_resolver in clawos_ui.py
 
-        # Connect click handlers in left panel
+        # Connect Enter key → main.py handler (slash/yolo-aware, single entry point)
         self.window._center_input.returnPressed.connect(
             lambda: self._handle_send(self.window._center_input.text())
         )
@@ -147,7 +146,6 @@ class ClawOSApp:
             self._messaging_hub = get_messaging_hub()
 
             def on_incoming(msg):
-                # Surface to UI
                 if hasattr(self.window, "_add_message"):
                     sender = msg.sender_name or msg.sender
                     self.window._add_message(
@@ -171,7 +169,6 @@ class ClawOSApp:
             self._mcp_manager.connect_all()
             self.window._mcp_manager = self._mcp_manager
 
-            # Add MCP tools to composio context
             mcp_tools = self._mcp_manager.get_tools_for_prompt()
             if mcp_tools:
                 log.info(f"✅ MCP: {len(mcp_tools.split(chr(10)))-1} tools loaded")
@@ -232,7 +229,7 @@ class ClawOSApp:
 
     def _print_banner(self):
         print()
-        print("  🟣 CLAWOS v2.0.0")
+        print("  🟣 CLAWOS v2.0.1")
         print("  Desktop AI Agent — Agentic OS")
         print(f"  Composio: {'✅ Connected' if self._composio_configured() else '⚠️ Add API key in Settings'}")
         print(f"  WhatsApp: {'✅ Configured' if self._whatsapp_configured() else '⚠️ Add credentials in Settings'}")
@@ -247,6 +244,7 @@ class ClawOSApp:
         return bool(keys.get("evolution_api_key") and keys.get("evolution_instance"))
 
     def _handle_send(self, text: str):
+        """Single message entry point — handles slash commands and yolo mode."""
         if not text.strip():
             return
         # Detect /yolo and update badge
@@ -317,16 +315,13 @@ class ClawOSApp:
                 approval = _load_approval()
                 executor = StreamingExecutor(approval)
 
-                # Store reference for approval dialogs
-                self._pending_executor = executor
-
                 # Use window's streaming toggle state
                 streaming = self.window._streaming_enabled
 
                 def on_token(token: str):
                     self.window.streaming_token.emit(token)
 
-                def on_complete(text: str):
+                def on_complete(text: str = ""):
                     self.window.response_complete.emit()
 
                 def on_show_approval(action: str):
@@ -337,7 +332,7 @@ class ClawOSApp:
                     on_show=on_show_approval,
                     on_done=lambda approved: setattr(executor, '_approval_result', approved),
                 )
-                # Wire UI approval result → executor
+                # Wire UI approval result → executor (async path via QTimer.singleShot)
                 self.window._approval_resolver = executor.set_approval_result
 
                 result = executor.execute(
@@ -347,9 +342,6 @@ class ClawOSApp:
                     memory_context=memory_ctx,
                     composio_context=composio_ctx,
                 )
-
-                # Non-streaming: the executor already called on_complete
-                # No redundant emit needed — remove to prevent double-display
 
             except Exception as e:
                 log.error(f"Executor error: {traceback.format_exc()}")
@@ -370,7 +362,7 @@ class ClawOSApp:
     def _on_complete(self, text: str = ""):
         self._processing = False
         self.window._set_orb_state("idle")
-        self.window._log_activity(f"Response ready")
+        self.window._log_activity("Response ready")
         # Stop proactive streaming trigger
         if hasattr(self, "_proactive") and self._proactive:
             self._proactive.set_streaming_active(False)
@@ -396,13 +388,6 @@ class ClawOSApp:
             )
         except Exception:
             pass
-
-    def _on_approval_request(self, action: str):
-        from clawos_ui import ApprovalDialog
-        dialog = ApprovalDialog(action, self.window)
-        self._approval_callback_result = dialog.get_result()
-        if self._pending_executor:
-            self._pending_executor._approval_callback_result = self._approval_callback_result
 
 
 def main():

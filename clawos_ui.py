@@ -1604,7 +1604,7 @@ class ClawOSWindow(QMainWindow):
         self._center_input = QLineEdit()
         self._center_input.setPlaceholderText("Ask ClawOS anything... or click 🔮 to speak")
         self._center_input.setMinimumHeight(44)
-        self._center_input.returnPressed.connect(self._send_message)
+        # NOTE: returnPressed is wired in main.py:88 → _handle_send (slash cmd + yolo detection)
         self._center_input.setStyleSheet(f"""
             QLineEdit {{
                 background: {C.get('BG3')};
@@ -1653,7 +1653,10 @@ class ClawOSWindow(QMainWindow):
             }}
             QPushButton:hover {{ opacity: 0.85; }}
         """)
-        send_btn.clicked.connect(self._send_message)
+        # Send button delegates to main.py handler (slash/yolo-aware)
+        send_btn.clicked.connect(
+            lambda: self._app._handle_send(self._center_input.text())
+        )
         ih.addWidget(send_btn)
 
         v.addWidget(input_frame)
@@ -1819,12 +1822,9 @@ class ClawOSWindow(QMainWindow):
     # ── Chat ────────────────────────────────────────────────────────
 
     def _send_message(self):
-        text = self._center_input.text().strip()
-        if not text:
-            return
-        self._center_input.clear()
-        self._add_message("user", text)
-        self._process_message(text)
+        """DEPRECATED: Enter key → main.py:_handle_send, send btn → main.py:_handle_send.
+        Kept for potential future use but not connected to any signal."""
+        pass
 
     def _add_message(self, role: str, text: str):
         ts = datetime.now().strftime("%H:%M")

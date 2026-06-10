@@ -4,6 +4,7 @@ Triggers alerts when conditions are met.
 """
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import logging
 import re
@@ -163,7 +164,6 @@ class AppMonitor:
             return MonitorResult(mid, mtype, target, "error", f"Unknown type: {mtype}", "")
 
     def _check_url(self, mid: str, url: str, mon: dict) -> MonitorResult:
-        import datetime
         try:
             import requests
             expected = mon.get("expected_status", 200)
@@ -171,23 +171,22 @@ class AppMonitor:
             if resp.status_code == expected:
                 return MonitorResult(mid, "url", url, "ok",
                                     f"✅ {url} — HTTP {resp.status_code}",
-                                    datetime.datetime.now().isoformat())
+                                    datetime.now().isoformat())
             else:
                 return MonitorResult(mid, "url", url, "error",
                                     f"⚠️ {url} — HTTP {resp.status_code} (expected {expected})",
-                                    datetime.datetime.now().isoformat())
+                                    datetime.now().isoformat())
         except Exception as e:
             return MonitorResult(mid, "url", url, "error",
                                 f"❌ {url} — {str(e)[:100]}",
-                                datetime.datetime.now().isoformat())
+                                datetime.now().isoformat())
 
     def _check_file(self, mid: str, file_path: str, mon: dict) -> MonitorResult:
-        import datetime
         p = Path(file_path)
         if not p.exists():
             return MonitorResult(mid, "file", file_path, "error",
                                 f"❌ File not found: {file_path}",
-                                datetime.datetime.now().isoformat())
+                                datetime.now().isoformat())
 
         mtime = p.stat().st_mtime
         last_mtime = mon.get("last_mtime", 0)
@@ -196,19 +195,18 @@ class AppMonitor:
             mon["last_mtime"] = mtime
             return MonitorResult(mid, "file", file_path, "ok",
                                 f"👁️ Watching {file_path}",
-                                datetime.datetime.now().isoformat())
+                                datetime.now().isoformat())
         elif mtime != last_mtime:
             mon["last_mtime"] = mtime
             return MonitorResult(mid, "file", file_path, "changed",
                                 f"📝 {file_path} was modified",
-                                datetime.datetime.now().isoformat())
+                                datetime.now().isoformat())
         else:
             return MonitorResult(mid, "file", file_path, "ok",
                                 f"👁️ {file_path} — unchanged",
-                                datetime.datetime.now().isoformat())
+                                datetime.now().isoformat())
 
     def _check_process(self, mid: str, process_name: str, mon: dict) -> MonitorResult:
-        import datetime
         try:
             import subprocess
             if Platform.system() == "Windows":
@@ -222,15 +220,15 @@ class AppMonitor:
             if found:
                 return MonitorResult(mid, "process", process_name, "ok",
                                     f"✅ Process '{process_name}' is running",
-                                    datetime.datetime.now().isoformat())
+                                    datetime.now().isoformat())
             else:
                 return MonitorResult(mid, "process", process_name, "error",
                                     f"🔴 Process '{process_name}' is NOT running",
-                                    datetime.datetime.now().isoformat())
+                                    datetime.now().isoformat())
         except Exception as e:
             return MonitorResult(mid, "process", process_name, "error",
                                 f"❌ Process check failed: {e}",
-                                datetime.datetime.now().isoformat())
+                                datetime.now().isoformat())
 
     # ── Storage ────────────────────────────────────────────────────
 
