@@ -1,6 +1,6 @@
 """
-ClawOS v2 — Desktop AI Agent
-Full agentic OS with streaming, safety, messaging integrations.
+ClawOS v2.0.1 — Desktop AI Agent
+Full agentic OS with streaming, safety, voice, memory, subagents, messaging, MCP.
 """
 from __future__ import annotations
 
@@ -66,6 +66,13 @@ class ClawOSApp:
         self._approval_callback_result: bool = True
         self._pending_executor = None
 
+        # ── Load all subsystems ────────────────────────────────
+        self._voice_engine = None
+        self._memory_engine = None
+        self._subagent_orchestrator = None
+        self._messaging_hub = None
+        self._mcp_manager = None
+
         # Import UI
         from clawos_ui import ClawOSWindow
 
@@ -89,6 +96,88 @@ class ClawOSApp:
             get_cron_manager().restore_all()
         except Exception as e:
             log.warning(f"Cron restore error: {e}")
+
+        # ── Initialize subsystems ──────────────────────────────
+        self._init_voice()
+        self._init_memory()
+        self._init_subagents()
+        self._init_messaging()
+        self._init_mcp()
+
+    def _init_voice(self):
+        """Phase 3: Initialize voice engine."""
+        try:
+            from agent.voice_engine import get_voice_engine, VoiceEngine
+            self._voice_engine = get_voice_engine()
+            self.window._voice_engine = self._voice_engine
+            log.info("✅ Voice engine ready")
+        except Exception as e:
+            log.warning(f"Voice engine init failed: {e}")
+
+    def _init_memory(self):
+        """Phase 4: Initialize memory compression engine."""
+        try:
+            from memory.memory_engine import get_memory_engine
+            self._memory_engine = get_memory_engine()
+            self.window._memory_engine = self._memory_engine
+            log.info("✅ Memory engine ready")
+        except Exception as e:
+            log.warning(f"Memory engine init failed: {e}")
+
+    def _init_subagents(self):
+        """Phase 5: Initialize subagent orchestrator."""
+        try:
+            from agent.subagent_orchestrator import get_orchestrator
+            self._subagent_orchestrator = get_orchestrator()
+            self.window._subagent_orchestrator = self._subagent_orchestrator
+
+            def on_subagent_status(agent_id, status):
+                self.window._log_activity(f"Subagent {agent_id[:12]}: {status}")
+            self._subagent_orchestrator.set_progress_callback(on_subagent_status)
+
+            log.info("✅ Subagent orchestrator ready")
+        except Exception as e:
+            log.warning(f"Subagent init failed: {e}")
+
+    def _init_messaging(self):
+        """Phase 7: Start incoming message polling."""
+        try:
+            from messaging.messaging_hub import get_messaging_hub
+            self._messaging_hub = get_messaging_hub()
+
+            def on_incoming(msg):
+                # Surface to UI
+                if hasattr(self.window, "_add_message"):
+                    sender = msg.sender_name or msg.sender
+                    self.window._add_message(
+                        "assistant",
+                        f"📩 [{msg.platform.upper()}] {sender}: {msg.body[:80]}",
+                    )
+                self.window._log_activity(f"Incoming {msg.platform}: {msg.body[:40]}")
+
+            self._messaging_hub.on_message = on_incoming
+            self._messaging_hub.start()
+            self.window._messaging_hub = self._messaging_hub
+            log.info("✅ Messaging hub started")
+        except Exception as e:
+            log.warning(f"Messaging hub init failed: {e}")
+
+    def _init_mcp(self):
+        """Phase 8: Connect all MCP servers."""
+        try:
+            from mcp.mcp_manager import get_mcp_manager
+            self._mcp_manager = get_mcp_manager()
+            self._mcp_manager.connect_all()
+            self.window._mcp_manager = self._mcp_manager
+
+            # Add MCP tools to composio context
+            mcp_tools = self._mcp_manager.get_tools_for_prompt()
+            if mcp_tools:
+                log.info(f"✅ MCP: {len(mcp_tools.split(chr(10)))-1} tools loaded")
+
+            log.info("✅ MCP manager ready")
+        except Exception as e:
+            log.warning(f"MCP init failed: {e}")
 
     def start(self):
         app = QApplication(sys.argv)
