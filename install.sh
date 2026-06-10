@@ -24,12 +24,25 @@ PYTHON_VERSION=$($PYTHON --version 2>&1 | awk '{print $2}')
 echo "✓ Python $PYTHON_VERSION detected"
 
 # Require Python 3.10+
-PY_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
-PY_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+PY_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1 | tr -d '[:alpha:]')
+PY_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2 | tr -d '[:alpha:]')
+
+# Strip any extra parts (e.g. "3.9.6" → 3, 9)
+PY_MAJOR=$(echo $PYTHON_VERSION | sed 's/\([0-9]*\)\.\([0-9]*\).*/\1/' | tr -d '[:alpha:]')
+PY_MINOR=$(echo $PYTHON_VERSION | sed 's/\([0-9]*\)\.\([0-9]*\).*/\2/' | tr -d '[:alpha:]')
+
 if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]); then
-    echo "❌ Python 3.10+ required. You have $PYTHON_VERSION"
-    echo "   Update: brew install python@3.12"
-    exit 1
+    echo "⚠️  Python $PYTHON_VERSION detected. ClawOS needs Python 3.10+."
+    echo "   Installing Python 3.12 via Homebrew..."
+    if command -v brew &> /dev/null; then
+        brew install python@3.12
+        PYTHON="/opt/homebrew/bin/python3.12"
+        PYTHON_VERSION=$($PYTHON --version 2>&1 | awk '{print $2}')
+        echo "✓ Python $PYTHON_VERSION installed"
+    else
+        echo "❌ Homebrew not found. Install from: https://brew.sh"
+        exit 1
+    fi
 fi
 
 # Step 1: Create virtual environment
