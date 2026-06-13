@@ -321,9 +321,6 @@ class ClawOSApp:
                 def on_token(token: str):
                     self.window.streaming_token.emit(token)
 
-                def on_complete(text: str = ""):
-                    self.window.response_complete.emit()
-
                 def on_show_approval(action: str):
                     self.window.approval_request.emit(action)
 
@@ -332,8 +329,9 @@ class ClawOSApp:
                     on_show=on_show_approval,
                     on_done=lambda approved: setattr(executor, '_approval_result', approved),
                 )
-                # Wire UI approval result → executor (async path via QTimer.singleShot)
-                self.window._approval_resolver = executor.set_approval_result
+
+                def on_complete(text: str = ""):
+                    self.window.response_complete.emit(text)
 
                 result = executor.execute(
                     goal=text,
@@ -347,7 +345,7 @@ class ClawOSApp:
                 log.error(f"Executor error: {traceback.format_exc()}")
                 error_msg = f"⚠️ Error: {str(e)[:200]}"
                 self.window.streaming_token.emit(error_msg)
-                self.window.response_complete.emit()
+                self.window.response_complete.emit(error_msg)
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()

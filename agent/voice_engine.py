@@ -404,6 +404,12 @@ class VoiceEngine:
             return
         self._tts.speak_async(text)
 
+    def speak_async(self, text: str, on_complete: Callable | None = None):
+        """Non-blocking TTS — fires and returns immediately."""
+        if self._muted:
+            return
+        self._tts.speak_async(text, on_complete=on_complete)  # type: ignore
+
     def listen(self, timeout: float = 10.0) -> str | None:
         return self._stt.listen(timeout)
 
@@ -429,8 +435,140 @@ class VoiceEngine:
     def is_muted(self) -> bool:
         return self._muted
 
+    def start_wake_word_listener(self, on_wake: Callable[[str], None]):
+        """Start background wake word detection. Fires on_wake(word) when detected."""
+        detector = get_wake_word_detector()
+        detector.add_callback(on_wake)
+        detector.start()
+
+    def stop_wake_word_listener(self):
+        """Stop background wake word detection."""
+        detector = get_wake_word_detector()
+        detector.stop()
+
 
 # ── Convenience helpers ──────────────────────────────────────────────
+
+
+# ── Wake Word Detector ────────────────────────────────────────────────
+
+class WakeWordDetector:
+    """
+    Background wake word listener using openwakeword (open source, no API key).
+    Listens for 'hey josh' or 'hey bot' and fires a callback.
+    """
+
+    def __init__(self):
+        self._model = None
+        self._running = False
+        self._thread: threading.Thread | None = None
+        self._callbacks: list[Callable[[str], None]] = []
+
+    def add_callback(self, cb: Callable[[str], None]):
+        """Register a callback: fires with the detected wake word string."""
+        self._callbacks.append(cb)
+
+    def remove_callback(self, cb: Callable[[str], None]):
+        if cb in self._callbacks:
+            self._callbacks.remove(cb)
+
+    def _fire(self, word: str):
+        for cb in self._callbacks:
+            try:
+                cb(word)
+            except Exception as e:
+                log.warning(f"Wake word callback error: {e}")
+
+    def start(self):
+        """Start listening in a background thread. Idempotent."""
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="wake-word")
+        self._thread.start()
+        log.info("✅ Wake word listener started")
+
+    def stop(self):
+        """Stop listening."""
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=3)
+        log.info("✅ Wake word listener stopped")
+
+    def _listen_loop(self):
+        """Continuously listen and detect wake words."""
+        try:
+            import openwakeword
+            from openwakeword.model import Model
+            oww_models = openwakeword.get_model()
+            self._model = oww_models
+            log.info(f"Wake word model loaded: {list(oww_models.keys())}")
+        except ImportError:
+            log.warning(
+                "openwakeword not installed. "
+                "Run: pip install openwakeword "
+                "Then download a model or use auto-train."
+            )
+            return
+        except Exception as e:
+            log.warning(f"Wake word model init failed: {e}")
+            return
+
+        try:
+            import sounddevice as sd
+            import numpy as np
+        except ImportError:
+            log.warning("sounddevice not installed — wake word requires: pip install sounddevice numpy")
+            return
+
+        sr = 16000
+        chunk = 12800  # ~800ms chunks
+
+        def audio_stream():
+            q: queue.Queue = queue.Queue()
+
+            def callback(indata, frames, time_, status):
+                if status:
+                    log.warning(f"mic status: {status}")
+                q.put(indata.copy())
+
+            stream = sd.InputStream(samplerate=sr, channels=1, dtype="float32",
+                                     blocksize=chunk, callback=callback)
+            with stream:
+                while self._running:
+                    try:
+                        chunk_data = q.get(timeout=1.0)
+                        yield chunk_data.flatten()
+                    except queue.Empty:
+                        continue
+
+        log.info("Wake word: listening for 'hey josh'...")
+        for audio in audio_stream():
+            if not self._running:
+                break
+            if self._model is None:
+                continue
+
+            try:
+                # Feed audio to openwakeword
+                preds = self._model.predict(audio)
+                for word, score in preds.items():
+                    if score > 0.5 and word not in ("silence", "unknown", "background_noise"):
+                        log.info(f"Wake word detected: '{word}' ({score:.2f})")
+                        self._fire(word)
+            except Exception as e:
+                log.debug(f"Wake word prediction error: {e}")
+
+
+_WAKE_WORD_DETECTOR: WakeWordDetector | None = None
+
+
+def get_wake_word_detector() -> WakeWordDetector:
+    global _WAKE_WORD_DETECTOR
+    if _WAKE_WORD_DETECTOR is None:
+        _WAKE_WORD_DETECTOR = WakeWordDetector()
+    return _WAKE_WORD_DETECTOR
+
 
 _VOICE_ENGINE: VoiceEngine | None = None
 
@@ -445,7 +583,6 @@ def get_voice_engine() -> VoiceEngine:
 def speak_text(text: str, blocking: bool = False):
     """Quick TTS helper."""
     get_voice_engine().speak(text, blocking=blocking)
-
 
 def listen_speech(timeout: float = 8.0) -> str | None:
     """Quick STT helper."""

@@ -828,6 +828,8 @@ class SettingsModal(QDialog):
         data["stt_engine"] = self._stt_combo.currentText()
         data["voice_auto_play"] = self._autoplay_cb.isChecked()
         _save_settings(data)
+        # Update runtime flags immediately
+        self._voice_auto_play = self._autoplay_cb.isChecked()
         self._show_toast("✅ Voice settings saved!")
 
     # ── Memory Page ────────────────────────────────────────────────────
@@ -1245,7 +1247,7 @@ class ClawOSWindow(QMainWindow):
 
     # Signals
     streaming_token = pyqtSignal(str)
-    response_complete = pyqtSignal()
+    response_complete = pyqtSignal(str)  # emits final response text for auto-TTS
     approval_request = pyqtSignal(str)
     state_change = pyqtSignal(str)
 
@@ -1266,6 +1268,8 @@ class ClawOSWindow(QMainWindow):
         self._settings = _load_settings()
         self._approval = _load_approval()
         self._streaming_enabled = self._approval.get("streaming_enabled", True)
+        self._voice_auto_play = self._settings.get("voice_auto_play", True)
+        self._voice_active = False  # True when orb listening loop is running
 
         # Central widget
         central = QWidget()
@@ -1445,6 +1449,33 @@ class ClawOSWindow(QMainWindow):
             """)
         self._yolo_badge.setVisible(False)
         v.addWidget(self._yolo_badge)
+
+        # Agent profile selector
+        v.addSpacing(8)
+        v.addWidget(self._make_section_label("🤖 AGENT MODE"))
+        self._agent_profile_combo = QComboBox()
+        self._agent_profile_combo.setFixedHeight(28)
+        self._agent_profile_combo.setStyleSheet(f"""
+            QComboBox {{
+                background: {C.get('BG3')};
+                color: {C.get('TEXT')};
+                border: 1px solid {C.get('BORDER')};
+                border-radius: 8px;
+                padding: 4px 10px;
+                font-size: 12px;
+            }}
+            QComboBox:hover {{ border-color: {C.get('ACC')}; }}
+            QComboBox::drop-down {{ border: none; width: 20px; }}
+            QComboBox QAbstractItemView {{
+                background: {C.get('BG2')};
+                color: {C.get('TEXT')};
+                border: 1px solid {C.get('BORDER')};
+                selection-background-color: {C.get('ACC')};
+            }}
+        """)
+        self._load_agent_profiles()
+        self._agent_profile_combo.currentIndexChanged.connect(self._on_agent_profile_changed)
+        v.addWidget(self._agent_profile_combo)
 
         return panel
 
@@ -1868,7 +1899,7 @@ class ClawOSWindow(QMainWindow):
                         self.streaming_token.emit(token)
 
                 def on_complete(text: str):
-                    self.response_complete.emit()
+                    self.response_complete.emit(text)
 
                 result = executor.execute(
                     goal=text,
@@ -1905,11 +1936,11 @@ class ClawOSWindow(QMainWindow):
                         else:
                             self.streaming_token.emit(response)
                             break
-                    self.response_complete.emit()
+                    self.response_complete.emit(response)
 
                 except Exception as e:
                     self.streaming_token.emit(f"⚠️ Error: {str(e)[:100]}")
-                    self.response_complete.emit()
+                    self.response_complete.emit(f"⚠️ Error: {str(e)[:100]}")
 
             except Exception as e:
                 self.streaming_token.emit(f"⚠️ Error: {str(e)[:100]}")
@@ -1926,9 +1957,11 @@ class ClawOSWindow(QMainWindow):
             ))
 
     def _on_response_complete(self, text: str = ""):
-        """text may be a string or ExecutionResult."""
+        """Called when LLM response is fully streamed.
+        - Cleans up streaming bubble
+        - If voice session active → auto-play response via TTS, return to listening"""
         self._processing = False
-        self._set_orb_state("idle")
+
         if hasattr(self, "_current_bubble") and self._current_bubble:
             b = self._current_bubble
             if hasattr(b, "_streaming_done"):
@@ -1936,7 +1969,29 @@ class ClawOSWindow(QMainWindow):
             if hasattr(b, "_stream_timer"):
                 b._stream_timer.stop()
             self._current_bubble = None
-        self._log_activity(f"Response complete")
+
+        # Auto-play TTS if voice session is active
+        if (hasattr(self, "_voice_active") and self._voice_active
+                and hasattr(self, "_voice_auto_play") and self._voice_auto_play
+                and text):
+            try:
+                from agent.voice_engine import get_voice_engine
+                ve = get_voice_engine()
+                self._set_orb_state("speaking")
+                # Strip markdown/formatting for cleaner speech
+                clean = text.replace("**", "").replace("*", "").replace("`", "").replace("#", "")
+                clean = clean[:1000]  # cap at 1000 chars for TTS
+                ve.speak_async(clean, on_complete=lambda: (
+                    self._set_orb_state("listening")
+                    if hasattr(self, "_voice_active") and self._voice_active
+                    else self._set_orb_state("idle")
+                ))
+                return
+            except Exception as e:
+                log.warning(f"TTS auto-play failed: {e}")
+
+        self._set_orb_state("idle")
+        self._log_activity("Response complete")
 
     # Thread-safe approval handling
     _approval_resolver = None  # set by main.py: executor.set_approval_result
@@ -2031,11 +2086,77 @@ class ClawOSWindow(QMainWindow):
         """)
 
     def _toggle_voice(self):
-        if self._orb_state == "listening":
+        """Start or stop voice listening session."""
+        if self._orb_state in ("listening", "speaking"):
+            # Stop current session
+            self._voice_active = False
             self._set_orb_state("idle")
-        else:
-            self._set_orb_state("listening")
-            self._center_input.setFocus()
+            return
+
+        # Start listening session
+        self._voice_active = True
+        self._set_orb_state("listening")
+        self._center_input.setFocus()
+
+        def voice_loop():
+            """Background thread: listen → transcribe → send → speak response."""
+            from agent.voice_engine import get_voice_engine
+            ve = get_voice_engine()
+            auto_play = self._voice_auto_play if hasattr(self, "_voice_auto_play") else True
+
+            while self._voice_active:
+                try:
+                    # 1. Listen for speech
+                    transcript = ve.listen(timeout=8.0)
+                    if not transcript:
+                        continue
+                    if not self._voice_active:
+                        break
+
+                    log.info(f"🎤 You said: {transcript}")
+
+                    # Show transcript in input
+                    QTimer.singleShot(0, lambda t=transcript: (
+                        self._center_input.setText(t),
+                        self._center_input.setStyleSheet(f"""
+                            QLineEdit {{
+                                background: {C.get('BG3')};
+                                color: {C.get('CYAN')};
+                                border: 2px solid {C.get('CYAN')};
+                                border-radius: 22px;
+                                padding: 0px 16px;
+                                font-size: 14px;
+                            }}
+                        """)
+                    ))
+
+                    # 2. Send to LLM
+                    self._set_orb_state("processing")
+
+                    # Use main.py's _handle_send if available
+                    if hasattr(self, "_app") and self._app:
+                        self._app._handle_send(transcript)
+                    else:
+                        self._process_message(transcript)
+
+                    # 3. Wait for response (response_complete signal fires)
+                    # Auto-play when response is done
+                    if auto_play:
+                        def on_response():
+                            if hasattr(self, "_last_response") and self._last_response:
+                                self._set_orb_state("speaking")
+                                ve.speak_async(self._last_response)
+                                self._last_response = ""
+                        # Hook into response_complete for auto-play
+                        pass  # wired via signal below
+
+                except Exception as e:
+                    log.error(f"Voice loop error: {e}")
+                    QTimer.singleShot(0, lambda: self._set_orb_state("idle"))
+                    break
+
+        self._voice_thread = threading.Thread(target=voice_loop, daemon=True)
+        self._voice_thread.start()
 
     def _tick_orb(self):
         self._orb_ticker += 1
@@ -2115,3 +2236,35 @@ class ClawOSWindow(QMainWindow):
         self._activity_log.insertItem(0, item)
         if self._activity_log.count() > 20:
             self._activity_log.takeItem(self._activity_log.count() - 1)
+
+    # ── Agent Profiles ─────────────────────────────────────────────────
+
+    def _load_agent_profiles(self):
+        """Populate the agent profile dropdown."""
+        try:
+            from memory.agent_profiles import list_agent_profiles as get_all_agent_profiles
+            profiles = get_all_agent_profiles()
+            self._agent_profile_combo.clear()
+            for p in profiles:
+                label = f"{p.get('emoji', '🤖')} {p.get('name', 'Unknown')}"
+                self._agent_profile_combo.addItem(label, p.get("id", ""))
+            # Select saved profile
+            saved = self._settings.get("agent_profile", "professional")
+            idx = self._agent_profile_combo.findData(saved)
+            if idx >= 0:
+                self._agent_profile_combo.setCurrentIndex(idx)
+        except Exception as e:
+            log.warning(f"Failed to load agent profiles: {e}")
+            self._agent_profile_combo.addItem("🤖 Professional", "professional")
+
+    def _on_agent_profile_changed(self, idx: int):
+        """Save selected agent profile and update executor context."""
+        profile_id = self._agent_profile_combo.itemData(idx) if idx >= 0 else "professional"
+        self._settings["agent_profile"] = profile_id
+        try:
+            _save_settings(self._settings)
+        except Exception:
+            pass  # Non-critical
+        # Surface change in activity log
+        profile_name = self._agent_profile_combo.itemText(idx)
+        self._log_activity(f"Agent: {profile_name}")

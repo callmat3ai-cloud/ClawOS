@@ -14,8 +14,7 @@ edge-tts>=7.0.0          # Free Edge TTS (cross-platform, no API key)
 faster-whisper>=0.10.0   # Local Whisper STT (no internet required)
 sounddevice>=0.4.7        # Audio I/O for Whisper STT
 scipy>=1.12.0            # Audio processing
-# elevenlabs>=3.0.0      # Uncomment if using ElevenLabs TTS
-# kokoro-onnx>=0.9.0     # Uncomment for Kokoro local TTS
+openwakeword>=0.1.0      # Open-source wake word detection (no API key)
 
 # Computer control
 pyautogui>=0.9.54
