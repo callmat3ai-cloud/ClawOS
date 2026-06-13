@@ -1421,6 +1421,11 @@ class ClawOSWindow(QMainWindow):
         self._mem_bar = self._make_metric_bar("RAM")
         self._gpu_bar = self._make_metric_bar("GPU")
         self._net_bar = self._make_metric_bar("NET")
+        # Keep references to prevent GC from deleting nested widgets
+        self._cpu_bar._parent_w = self._cpu_bar
+        self._mem_bar._parent_w = self._mem_bar
+        self._gpu_bar._parent_w = self._gpu_bar
+        self._net_bar._parent_w = self._net_bar
         v.addWidget(self._cpu_bar)
         v.addWidget(self._mem_bar)
         v.addWidget(self._gpu_bar)
