@@ -1421,11 +1421,6 @@ class ClawOSWindow(QMainWindow):
         self._mem_bar = self._make_metric_bar("RAM")
         self._gpu_bar = self._make_metric_bar("GPU")
         self._net_bar = self._make_metric_bar("NET")
-        # Keep references to prevent GC from deleting nested widgets
-        self._cpu_bar._parent_w = self._cpu_bar
-        self._mem_bar._parent_w = self._mem_bar
-        self._gpu_bar._parent_w = self._gpu_bar
-        self._net_bar._parent_w = self._net_bar
         v.addWidget(self._cpu_bar)
         v.addWidget(self._mem_bar)
         v.addWidget(self._gpu_bar)
@@ -1514,7 +1509,11 @@ class ClawOSWindow(QMainWindow):
         h.addWidget(self_val)
         v.addLayout(h)
         bar_bg._val_label = self_val
-        return bar_bg
+        # Keep references to bar_bg and self_val so GC can't delete them
+        w._bar_bg = bar_bg
+        w._val_lbl = self_val
+        w._lbl = lbl
+        return w
 
     def _make_section_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
@@ -2178,9 +2177,8 @@ class ClawOSWindow(QMainWindow):
             mem = psutil.virtual_memory().percent
 
             for bar, val in [(self._cpu_bar, cpu), (self._mem_bar, mem)]:
-                bar.setValue(int(val))
-                if hasattr(bar, "_val_label"):
-                    bar._val_label.setText(f"{val:.0f}%")
+                bar._bar_bg.setValue(int(val))
+                bar._val_lbl.setText(f"{val:.0f}%")
 
             # GPU
             try:
@@ -2191,17 +2189,17 @@ class ClawOSWindow(QMainWindow):
                 )
                 if r.returncode == 0:
                     gpu = float(r.stdout.strip().split("\n")[0])
-                    self._gpu_bar.setValue(int(gpu))
-                    self._gpu_bar._val_label.setText(f"{gpu:.0f}%")
+                    self._gpu_bar._bar_bg.setValue(int(gpu))
+                    self._gpu_bar._val_lbl.setText(f"{gpu:.0f}%")
             except Exception:
-                self._gpu_bar._val_label.setText("N/A")
+                self._gpu_bar._val_lbl.setText("N/A")
 
             # Network
             net = psutil.net_io_counters()
             net_mb = (net.bytes_sent + net.bytes_recv) / (1024 * 1024)
             net_pct = min(100, int(net_mb))
-            self._net_bar.setValue(net_pct)
-            self._net_bar._val_label.setText(f"{net_mb:.0f}MB")
+            self._net_bar._bar_bg.setValue(net_pct)
+            self._net_bar._val_lbl.setText(f"{net_mb:.0f}MB")
 
         except Exception:
             pass
