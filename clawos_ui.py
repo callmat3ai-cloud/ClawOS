@@ -17,7 +17,7 @@ from typing import Callable, Optional
 import psutil
 from PyQt6.QtCore import (
     QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, QUrl,
-    QSizeGripStyle, pyqtSignal, QRectF,
+    pyqtSignal, QRectF,
 )
 from PyQt6.QtGui import (
     QAction, QBrush, QColor, QConicalGradient, QFont, QFontDatabase,
