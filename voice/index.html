@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawOS — Voice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: radial-gradient(ellipse at center, #0a0a1a 0%, #000005 100%);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow: hidden;
+    color: #fff;
+  }
+  .orb-container {
+    position: relative;
+    width: 280px;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid;
+    opacity: 0.3;
+    animation: pulse-ring 3s ease-in-out infinite;
+  }
+  .ring-1 { width: 280px; height: 280px; animation-delay: 0s; }
+  .ring-2 { width: 320px; height: 320px; animation-delay: 0.5s; opacity: 0.2; }
+  .ring-3 { width: 360px; height: 360px; animation-delay: 1s; opacity: 0.1; }
+  .orb {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(100,180,255,0.9), rgba(30,80,180,0.6) 50%, rgba(10,30,80,0.3));
+    box-shadow: 0 0 60px rgba(80,160,255,0.5), 0 0 120px rgba(60,140,255,0.3), inset 0 0 40px rgba(255,255,255,0.1);
+    animation: orb-breathe 4s ease-in-out infinite;
+    transition: all 0.6s cubic-bezier(0.4,0,0.2,1);
+    position: relative;
+    z-index: 2;
+  }
+  .orb::before {
+    content: '';
+    position: absolute;
+    top: 15%;
+    left: 20%;
+    width: 35%;
+    height: 25%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.6), transparent);
+    border-radius: 50%;
+    transform: rotate(-30deg);
+  }
+  .orb::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20%;
+    height: 20%;
+    background: rgba(255,255,255,0.4);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    filter: blur(4px);
+  }
+  .status-text {
+    margin-top: 30px;
+    font-size: 18px;
+    color: rgba(255,255,255,0.8);
+    text-align: center;
+    min-height: 27px;
+  }
+  .transcript {
+    margin-top: 10px;
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    min-height: 20px;
+    max-width: 600px;
+    padding: 0 20px;
+  }
+  .listening .orb {
+    background: radial-gradient(circle at 35% 35%, rgba(100,255,180,0.9), rgba(30,180,100,0.6) 50%, rgba(10,80,40,0.3));
+    box-shadow: 0 0 80px rgba(80,255,160,0.6), 0 0 160px rgba(60,220,140,0.4), inset 0 0 40px rgba(255,255,255,0.15);
+    animation: orb-listen 1.5s ease-in-out infinite;
+  }
+  .processing .orb {
+    background: radial-gradient(circle at 35% 35%, rgba(255,200,100,0.9), rgba(180,120,30,0.6) 50%, rgba(80,50,10,0.3));
+    box-shadow: 0 0 80px rgba(255,180,80,0.6), 0 0 160px rgba(220,140,60,0.4), inset 0 0 40px rgba(255,255,255,0.15);
+    animation: orb-process 0.8s ease-in-out infinite;
+  }
+  .speaking .orb {
+    background: radial-gradient(circle at 35% 35%, rgba(180,100,255,0.9), rgba(100,30,180,0.6) 50%, rgba(40,10,80,0.3));
+    box-shadow: 0 0 80px rgba(160,80,255,0.6), 0 0 160px rgba(140,60,220,0.4), inset 0 0 40px rgba(255,255,255,0.15);
+    animation: orb-speak 0.6s ease-in-out infinite;
+  }
+  .error .orb {
+    background: radial-gradient(circle at 35% 35%, rgba(255,100,100,0.9), rgba(180,30,30,0.6) 50%, rgba(80,10,10,0.3));
+    box-shadow: 0 0 80px rgba(255,80,80,0.6), 0 0 160px rgba(220,60,60,0.4);
+  }
+  @keyframes orb-breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  @keyframes orb-listen {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+  @keyframes orb-process {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+  }
+  @keyframes orb-speak {
+    0%, 100% { transform: scale(1.02); }
+    50% { transform: scale(1.06); }
+  }
+  @keyframes pulse-ring {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.05); opacity: 0.1; }
+  }
+  .hint {
+    position: fixed;
+    bottom: 20px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+  }
+</style>
+</head>
+<body>
+  <div class="orb-container" id="orbContainer" title="Click to talk">
+    <div class="ring ring-1"></div>
+    <div class="ring ring-2"></div>
+    <div class="ring ring-3"></div>
+    <div class="orb" id="orb"></div>
+  </div>
+  <div class="status-text" id="status">Click the orb to talk</div>
+  <div class="transcript" id="transcript"></div>
+  <div class="hint">ClawOS Voice — WebSocket + Edge TTS</div>
+
+<script>
+  const orbContainer = document.getElementById('orbContainer');
+  const orb = document.getElementById('orb');
+  const statusEl = document.getElementById('status');
+  const transcriptEl = document.getElementById('transcript');
+  let ws = null;
+  let recognition = null;
+  let isListening = false;
+
+  function setState(state) {
+    orbContainer.className = 'orb-container ' + state;
+  }
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(proto + '//' + location.host + '/ws/voice');
+    ws.onopen = () => {
+      setState('');
+      statusEl.textContent = 'Connected — click orb to talk';
+    };
+    ws.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'status') {
+        if (msg.status === 'listening') { setState('listening'); statusEl.textContent = 'Listening...'; }
+        else if (msg.status === 'processing') { setState('processing'); statusEl.textContent = msg.message || 'Thinking...'; }
+        else if (msg.status === 'speaking') { setState('speaking'); statusEl.textContent = 'Speaking...'; }
+        else if (msg.status === 'error') { setState('error'); statusEl.textContent = msg.message || 'Error'; }
+        else { setState(''); statusEl.textContent = msg.message || 'Click orb to talk'; }
+      } else if (msg.type === 'reply') {
+        setState('speaking');
+        statusEl.textContent = 'Speaking...';
+        const audio = new Audio('/orb/tts/' + msg.filename);
+        audio.onended = () => { setState(''); statusEl.textContent = 'Click orb to talk'; };
+        audio.play();
+      }
+    };
+    ws.onclose = () => { setState('error'); statusEl.textContent = 'Disconnected — reconnecting...'; setTimeout(connect, 2000); };
+  }
+
+  function startListening() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      statusEl.textContent = 'Speech not supported in this browser';
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+    recognition.onstart = () => { isListening = true; setState('listening'); statusEl.textContent = 'Listening...'; };
+    recognition.onresult = (evt) => {
+      const text = evt.results[0][0].transcript;
+      transcriptEl.textContent = 'You: ' + text;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({type: 'transcript', text: text}));
+      }
+    };
+    recognition.onerror = (evt) => { console.error('Speech error:', evt.error); setState(''); statusEl.textContent = 'Error: ' + evt.error; isListening = false; };
+    recognition.onend = () => { isListening = false; };
+    recognition.start();
+  }
+
+  orbContainer.addEventListener('click', () => {
+    if (isListening) { recognition.stop(); return; }
+    if (ws && ws.readyState === WebSocket.OPEN) startListening();
+    else statusEl.textContent = 'Connecting...';
+  });
+
+  connect();
+</script>
+</body>
+</html>
