@@ -1,0 +1,45 @@
+# ClawOS Proactive Triggers
+triggers:
+  - id: disk_usage_alert
+    type: cron
+    schedule: "0 */6 * * *"
+    condition: "disk_usage > 80"
+    action: notify
+    message: "Disk usage crossed 80%. Consider cleanup."
+    priority: high
+
+  - id: daily_briefing
+    type: cron
+    schedule: "0 9 * * *"
+    condition: "always"
+    action: brief
+    message: "Good morning. Here's your daily briefing."
+    priority: normal
+
+  - id: session_log
+    type: cron
+    schedule: "0 4 * * *"
+    condition: "always"
+    action: log_session
+    priority: normal
+
+  - id: new_lead_alert
+    type: webhook
+    endpoint: "/webhook/ghl-lead"
+    condition: "new_contact"
+    action: qualify_and_notify
+    priority: high
+
+  - id: meeting_reminder
+    type: calendar
+    condition: "event_in_30min"
+    action: notify
+    message: "You have a meeting in 30 minutes."
+    priority: high
+
+  - id: memory_decay
+    type: cron
+    schedule: "0 0 * * 0"
+    condition: "always"
+    action: archive_old
+    priority: low
