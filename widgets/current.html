@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: rgba(10, 10, 26, 0.95);
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .widget {
+    text-align: center;
+    padding: 40px;
+  }
+  .title {
+    font-size: 48px;
+    font-weight: 200;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #64b4ff, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .message {
+    font-size: 24px;
+    color: rgba(255,255,255,0.8);
+    line-height: 1.6;
+  }
+  .timestamp {
+    margin-top: 40px;
+    font-size: 14px;
+    color: rgba(255,255,255,0.4);
+  }
+</style>
+</head>
+<body>
+  <div class="widget">
+    <div class="title">ClawOS</div>
+    <div class="message">Voice Orb Online<br>Voice Pipeline Ready<br>Desktop Widgets Active</div>
+    <div class="timestamp" id="ts"></div>
+  </div>
+  <script>
+    document.getElementById('ts').textContent = new Date().toLocaleString();
+    // Auto-refresh every 5s to pick up widget updates
+    setInterval(() => location.reload(), 5000);
+  </script>
+</body>
+</html>
