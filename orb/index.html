@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawOS — Voice Orb</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: radial-gradient(ellipse at center, #0a0a1a 0%, #000005 100%);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow: hidden;
+    color: #fff;
+  }
+  .orb-container {
+    position: relative;
+    width: 280px;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid;
+    opacity: 0.3;
+    animation: pulse-ring 3s ease-in-out infinite;
+  }
+  .ring-1 { width: 280px; height: 280px; animation-delay: 0s; }
+  .ring-2 { width: 320px; height: 320px; animation-delay: 0.5s; opacity: 0.2; }
+  .ring-3 { width: 360px; height: 360px; animation-delay: 1s; opacity: 0.1; }
+  .orb {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(100,180,255,0.9), rgba(30,80,180,0.6) 50%, rgba(10,30,80,0.3));
+    box-shadow: 0 0 60px rgba(80,160,255,0.5), 0 0 120px rgba(60,140,255,0.3), inset 0 0 40px rgba(255,255,255,0.1);
+    animation: orb-breathe 4s ease-in-out infinite;
+    transition: all 0.6s cubic-bezier(0.4,0,0.2,1);
+    position: relative;
+    z-index: 2;
+  }
+  .orb::before {
+    content: '';
+    position: absolute;
+    top: 15%;
+    left: 20%;
+    width: 35%;
+    height: 25%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.6), transparent);
+    border-radius: 50%;
+    transform: rotate(-30deg);
+  }
+  .orb::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20%;
+    height: 20%;
+    background: rgba(255,255,255,0.4);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    filter: blur(4px);
+  }
+  .status {
+    margin-top: 40px;
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.6;
+    transition: all 0.4s;
+  }
+  .status.listening { opacity: 1; color: #64b5f6; }
+  .status.processing { opacity: 1; color: #ffb74d; }
+  .status.speaking { opacity: 1; color: #81c784; }
+  .status.error { opacity: 1; color: #e57373; }
+
+  /* State: listening */
+  body.listening .orb {
+    background: radial-gradient(circle at 35% 35%, rgba(100,200,255,1), rgba(40,120,220,0.8) 50%, rgba(20,60,140,0.4));
+    box-shadow: 0 0 80px rgba(80,180,255,0.8), 0 0 160px rgba(60,160,255,0.5), inset 0 0 60px rgba(255,255,255,0.15);
+    animation: orb-listen 1.2s ease-in-out infinite;
+  }
+  body.listening .ring { border-color: rgba(100,180,255,0.6); animation: ring-listen 1.5s ease-in-out infinite; }
+
+  /* State: processing */
+  body.processing .orb {
+    background: radial-gradient(circle at 35% 35%, rgba(255,183,77,0.9), rgba(200,120,40,0.6) 50%, rgba(120,60,20,0.3));
+    box-shadow: 0 0 80px rgba(255,183,77,0.7), 0 0 160px rgba(255,160,50,0.4), inset 0 0 60px rgba(255,255,255,0.15);
+    animation: orb-process 0.6s ease-in-out infinite;
+  }
+  body.processing .ring { border-color: rgba(255,183,77,0.6); animation: ring-process 0.8s ease-in-out infinite; }
+
+  /* State: speaking */
+  body.speaking .orb {
+    background: radial-gradient(circle at 35% 35%, rgba(129,199,132,0.9), rgba(50,140,70,0.6) 50%, rgba(20,80,40,0.3));
+    box-shadow: 0 0 80px rgba(129,199,132,0.7), 0 0 160px rgba(100,180,110,0.4), inset 0 0 60px rgba(255,255,255,0.15);
+    animation: orb-speak 0.5s ease-in-out infinite;
+  }
+  body.speaking .ring { border-color: rgba(129,199,132,0.6); animation: ring-speak 0.7s ease-in-out infinite; }
+
+  /* State: error */
+  body.error .orb {
+    background: radial-gradient(circle at 35% 35%, rgba(229,115,115,0.9), rgba(180,60,60,0.6) 50%, rgba(100,20,20,0.3));
+    box-shadow: 0 0 80px rgba(229,115,115,0.7), 0 0 160px rgba(200,80,80,0.4), inset 0 0 60px rgba(255,255,255,0.15);
+    animation: orb-error 0.3s ease-in-out infinite;
+  }
+  body.error .ring { border-color: rgba(229,115,115,0.6); }
+
+  @keyframes orb-breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  @keyframes orb-listen {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+  }
+  @keyframes orb-process {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.08) rotate(5deg); }
+  }
+  @keyframes orb-speak {
+    0%, 100% { transform: scale(1); }
+    25% { transform: scale(1.06); }
+    75% { transform: scale(0.96); }
+  }
+  @keyframes orb-error {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+  @keyframes pulse-ring {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.05); opacity: 0.5; }
+  }
+  @keyframes ring-listen {
+    0%, 100% { transform: scale(1); opacity: 0.4; }
+    50% { transform: scale(1.1); opacity: 0.7; }
+  }
+  @keyframes ring-process {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.15); opacity: 0.6; }
+  }
+  @keyframes ring-speak {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.08); opacity: 0.5; }
+  }
+
+  .transcript {
+    margin-top: 24px;
+    font-size: 16px;
+    opacity: 0.7;
+    max-width: 600px;
+    text-align: center;
+    min-height: 24px;
+    padding: 0 20px;
+  }
+  .version {
+    position: fixed;
+    bottom: 20px;
+    font-size: 11px;
+    opacity: 0.3;
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+  <div class="orb-container">
+    <div class="ring ring-3"></div>
+    <div class="ring ring-2"></div>
+    <div class="ring ring-1"></div>
+    <div class="orb" id="orb"></div>
+  </div>
+  <div class="status" id="status">ONLINE</div>
+  <div class="transcript" id="transcript"></div>
+  <div class="version">CLAWOS v0.1</div>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const transcriptEl = document.getElementById('transcript');
+
+  function setState(state, text) {
+    document.body.className = state;
+    statusEl.textContent = text || state.toUpperCase();
+    statusEl.className = 'status ' + state;
+  }
+
+  // Listen for SSE events from backend
+  const evtSource = new EventSource('/events');
+  evtSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.state) setState(data.state, data.text);
+    if (data.transcript) transcriptEl.textContent = data.transcript;
+  };
+  evtSource.onerror = () => {
+    setState('error', 'CONNECTION LOST');
+  };
+
+  // Expose for backend push
+  window.clawos = { setState };
+</script>
+</body>
+</html>
